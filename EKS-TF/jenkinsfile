@@ -1,0 +1,57 @@
+pipeline{
+
+    parameters{
+        choice(name: 'terraformAction', choices: ['apply', 'destroy'], description: 'Choose the Terraform action to perform')
+    }
+    environment{
+        AWS_ACCESS_KEY_ID = credentials('aws_access_key_id')
+        AWS_SECRET_ACCESS_KEY = credentials('aws_secret_access_key')
+    }
+
+
+    agent any
+    stages{
+        stage('Checkout') {
+            steps {
+                script {
+                dir("terraform") {
+                    git branch: 'main', url: 'https://github.com/CloudSarathi/myntra-Clone-Project.git'
+                }
+            }
+         }
+    }
+
+        stage('Terraform Plan') {
+            steps {
+                sh 'pwd;cd EKS-TF/ ; terraform init'
+                sh 'pwd;cd EKS-TF/ ; terraform plan -out=tfplan'
+                sh 'pwd;cd EKS-TF/ ; terraform show -no-color tfplan > tfplan.txt'
+                    }
+                }
+
+        stage('Aproval') {
+            steps {
+                script {
+                    def plan =  readFile('EKS-TF/tfplan.txt')
+                input message: "Do you want to apply the Terraform plan?", 
+                parameters: [text(name: 'plan', defaultValue: plan, description: 'Terraform Plan')]
+                }
+            }
+        }
+
+        stage('Apply or Destroy') {
+            when {
+                expression { params.terraformAction == 'apply' || params.terraformAction == 'destroy' }
+            }
+            steps {
+                script{
+                    if (params.terraformAction == 'apply') {
+                        sh 'pwd;cd EKS-TF/ ; terraform apply -input=false tfplan'
+                    } else if (params.terraformAction == 'destroy') {
+                        sh "pwd;cd EKS-TF/ ; terraform destroy -auto-approve"
+                    }
+                }
+             }
+        }
+    }
+}
